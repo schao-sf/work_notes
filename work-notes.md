@@ -125,3 +125,257 @@ tailscale status
 ```powershell
 winget uninstall Tailscale.Tailscale
 ```
+
+## windows开启IP转发
+
+一、Windows 安装并登录 Tailscale
+
+管理员 PowerShell：
+
+1. 查看网卡
+
+```powershell
+Get-NetIPInterface
+```
+
+找到：
+
+- Tailscale 网卡
+- 物理网卡（WiFi/网线）
+
+例如：
+
+```powershell
+InterfaceAlias
+----------------
+Ethernet
+Tailscale
+```
+
+1. 开启所有网卡转发
+
+执行：
+
+```powershell
+Set-NetIPInterface -Forwarding Enabled
+```
+
+检查：
+
+```powershell
+Get-NetIPInterface | Where-Object {$_.Forwarding -eq "Enabled"}
+```
+
+应该看到：
+
+```powershell
+Ethernet       Enabled
+Tailscale      Enabled
+```
+
+三、开启 Windows 路由功能（推荐）
+
+注册表开启：
+
+```powershell
+Set-ItemProperty `
+-Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters" `
+-Name IPEnableRouter `
+-Value 1
+```
+
+重启：
+
+```powershell
+shutdown /r /t 0
+```
+
+四、确认你的内网网段
+
+Windows 执行：
+
+```powershell
+ipconfig
+```
+
+例如：
+
+```powershell
+Ethernet:
+
+IPv4 Address:
+172.18.16.100
+
+Subnet Mask:
+255.255.255.0
+```
+
+说明：
+
+你的内网：
+
+```powershell
+172.18.16.0/24
+```
+
+五、让 Tailscale 发布这个网段
+
+执行：
+
+```powershell
+tailscale up --advertise-routes=172.18.16.0/24
+```
+
+例如：
+
+你的 AI 在：
+
+```powershell
+172.18.16.23:11434
+```
+
+那么发布：
+
+```powershell
+tailscale up --advertise-routes=172.18.16.0/24
+```
+
+---
+
+如果提示：
+
+```powershell
+Warning: updating settings via 'tailscale up' requires specifying all non-default flags
+```
+
+使用：
+
+```powershell
+tailscale up `
+--reset `
+--advertise-routes=172.18.16.0/24
+```
+
+六、Tailscale 管理后台批准路由
+
+打开：
+
+[Tailscale Admin Console](https://login.tailscale.com/admin/machines?utm_source=chatgpt.com)
+
+找到你的 Windows：
+
+例如：
+
+```powershell
+windows-11
+```
+
+点击：
+
+```powershell
+Edit route settings
+```
+
+开启：
+
+```powershell
+172.18.16.0/24
+```
+
+保存。
+
+七、Mac 开启接受子网路由
+
+Mac：
+
+```powershell
+sudo tailscale up --accept-routes
+```
+
+检查：
+
+```powershell
+tailscale status
+```
+
+应该看到：
+
+```powershell
+windows-11
+subnet routes: 172.18.16.0/24
+```
+
+八、测试访问内网资源
+
+1. Ping
+
+Mac：
+
+```powershell
+ping 172.18.16.23
+```
+
+例如：
+
+```powershell
+64 bytes from 172.18.16.23
+```
+
+成功。
+
+九、Windows 防火墙放行转发
+
+如果 ping 不通：
+
+管理员 PowerShell：
+
+```powershell
+New-NetFirewallRule `
+-DisplayName "Tailscale Subnet Router Forward" `
+-Direction Inbound `
+-Action Allow `
+-Protocol Any
+```
+
+十、查看 Tailscale 路由状态
+
+Windows：
+
+```powershell
+tailscale status
+```
+
+查看：
+
+```powershell
+tailscale netcheck
+```
+
+查看已发布：
+
+```powershell
+tailscale debug prefs
+```
+
+应该有：
+
+```powershell
+AdvertiseRoutes:
+[
+172.18.16.0/24
+]
+```
+
+十一、停止子网转发
+
+如果以后不用：
+
+```powershell
+tailscale up --reset
+```
+
+或者：
+
+```powershell
+tailscale set --advertise-routes=
+```
